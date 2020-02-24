@@ -3,7 +3,8 @@
 #include "device_launch_parameters.h"
 #include "vec3.h"
 
-struct Ray {
+struct Ray 
+{
     vec3 origin, direction;
-    __device__ vec3 point_at_parameter(float t);
+    __device__ vec3 point_at_parameter(float t) const;
 };

@@ -4,7 +4,7 @@
 #include "ray_pathing.h"
 #include "ray.h"
 
-__device__ bool hit_sphere(Ray* r)
+__device__ float hit_sphere(Ray* r)
 {
     vec3 center = { 0, 0, -1 };
     float radius = 0.5;
@@ -13,15 +13,25 @@ __device__ bool hit_sphere(Ray* r)
     float b = 2.0 * dot(oc, r->direction);
     float c = dot(oc, oc) - radius * radius;
     float discriminant = b * b - 4 * a * c;
-    return discriminant > 0;
+    if (discriminant < 0)
+        return -1.0;
+    return (-b - sqrt(discriminant)) / (2.0 * a);
 }
 
 __device__ vec3 color(Ray* ray)
 {
-    if (hit_sphere(ray))
-        return { 1, 0, 0 };
+    float t = hit_sphere(ray);
+    if (t > 0)
+    {
+        vec3 N = ray->point_at_parameter(t);
+        N.Z += 1;
+        N *= 1.0 / N.length();
+        N += { 1, 1, 1 };
+        N *= 0.5;
+        return N;
+    }
     vec3 unit_direction = ray->direction.unit_vector();
-    float t = 0.5 * unit_direction.Y + 1.0;
+    t = 0.5 * unit_direction.Y + 1.0;
     return {
         1.0 - t + 0.5 * t,
         1.0 - t + 0.7 * t,
