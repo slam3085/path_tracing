@@ -28,3 +28,8 @@ __device__ vec3 operator*(const vec3& v1, float n)
 {
     return { v1.X * n, v1.Y * n, v1.Z * n };
 }
+
+__device__ float dot(const vec3& v1, const vec3& v2)
+{
+    return v1.X * v2.X + v1.Y * v2.Y + v1.Z * v2.Z;
+}

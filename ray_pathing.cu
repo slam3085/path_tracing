@@ -1,11 +1,25 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include "math.h"
-#include "gradient.h"
+#include "ray_pathing.h"
 #include "ray.h"
+
+__device__ bool hit_sphere(Ray* r)
+{
+    vec3 center = { 0, 0, -1 };
+    float radius = 0.5;
+    vec3 oc = r->origin - center;
+    float a = dot(r->direction, r->direction);
+    float b = 2.0 * dot(oc, r->direction);
+    float c = dot(oc, oc) - radius * radius;
+    float discriminant = b * b - 4 * a * c;
+    return discriminant > 0;
+}
 
 __device__ vec3 color(Ray* ray)
 {
+    if (hit_sphere(ray))
+        return { 1, 0, 0 };
     vec3 unit_direction = ray->direction.unit_vector();
     float t = 0.5 * unit_direction.Y + 1.0;
     return {
@@ -15,7 +29,7 @@ __device__ vec3 color(Ray* ray)
     };
 }
 
-__global__ void gradientKernel(vec3* dev_framebuffer, int height, int width)
+__global__ void ray_pathing_kernel(vec3* dev_framebuffer, int height, int width)
 {
     int size = width * height;
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -35,14 +49,14 @@ __global__ void gradientKernel(vec3* dev_framebuffer, int height, int width)
     }
 }
 
-cudaError_t gradientWithCuda(vec3* framebuffer, int height, int width)
+cudaError_t ray_pathing_with_cuda(vec3* framebuffer, int height, int width)
 {
     int size = width * height;
     cudaError_t cudaStatus = cudaSetDevice(0);
     vec3* dev_framebuffer = 0;
     cudaStatus = cudaMalloc((void**)&dev_framebuffer, size * sizeof(vec3));
     cudaStatus = cudaMemcpy(dev_framebuffer, framebuffer, size * sizeof(vec3), cudaMemcpyHostToDevice);
-    gradientKernel <<<height, width >>>(dev_framebuffer, height, width);
+    ray_pathing_kernel <<<height, width >>>(dev_framebuffer, height, width);
     cudaStatus = cudaGetLastError();
     cudaStatus = cudaDeviceSynchronize();
     cudaStatus = cudaMemcpy(framebuffer, dev_framebuffer, size * sizeof(vec3), cudaMemcpyDeviceToHost);
