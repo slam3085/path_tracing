@@ -3,4 +3,7 @@
 #include "device_launch_parameters.h"
 #include "vec3.h"
 
-cudaError_t gradientWithCuda(vec3* framebuffer, int height, int width);
+struct Ray {
+    vec3 origin, direction;
+    __device__ vec3 point_at_parameter(float t);
+};
