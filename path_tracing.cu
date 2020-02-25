@@ -5,32 +5,23 @@
 #include "ray.h"
 #include "sphere.h"
 #include "hittable.h"
-#include "stdio.h"
+#include "hittable_list.h"
 
 __global__ void init_world(Hittable** dev_world)
 {
     if (threadIdx.x == 0 && blockIdx.x == 0)
     {
-        dev_world[0] = new Sphere({ 0, 0, -1 }, 0.5);
-        dev_world[1] = new Sphere({ 0, -100.5, -1 }, 100);
+        Hittable** list = new Hittable*[2];
+        list[0] = new Sphere({ 0, 0, -1 }, 0.5);
+        list[1] = new Sphere({ 0, -100.5, -1 }, 100);
+        *dev_world = new HittableList(list, 2);
     }
 }
 
-__device__ vec3 color(Ray* ray, Hittable** dev_world, int world_size)
+__device__ vec3 color(Ray* ray, Hittable** dev_world)
 {
     HitRecord rec;
-    float t_min = 0.0, t_max = 1E9;
-    bool hit_anything = false;
-    float closest_so_far = t_max;
-    for (int i = 0; i < world_size; i++)
-    {
-        if (dev_world[i]->hit(ray, t_min, closest_so_far, &rec))
-        {
-            hit_anything = true;
-            closest_so_far = rec.t;
-        }
-    }
-    if(hit_anything)
+    if((*dev_world)->hit(ray, 0.0, 1E9, &rec))
     {
         vec3 ones = { 1, 1, 1 };
         return (rec.normal + ones) * 0.5;
@@ -44,7 +35,7 @@ __device__ vec3 color(Ray* ray, Hittable** dev_world, int world_size)
     };
 }
 
-__global__ void path_tracing_kernel(Hittable** dev_world, int world_size, vec3* dev_framebuffer, int height, int width)
+__global__ void path_tracing_kernel(Hittable** dev_world, vec3* dev_framebuffer, int height, int width)
 {
     int size = width * height;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -64,7 +55,7 @@ __global__ void path_tracing_kernel(Hittable** dev_world, int world_size, vec3* 
             origin, 
             lower_left_corner + horizontal * u + vertical * v
         };
-        dev_framebuffer[idx] = color(&ray, dev_world, world_size);
+        dev_framebuffer[idx] = color(&ray, dev_world);
     }
 }
 
@@ -76,12 +67,11 @@ cudaError_t path_tracing_with_cuda(vec3* framebuffer, int height, int width)
     vec3* dev_framebuffer = 0;
     cudaStatus = cudaMalloc((void**)&dev_framebuffer, size * sizeof(vec3));
     //world
-    int world_size = 2;
     Hittable** dev_world = 0;
-    cudaStatus = cudaMalloc(&dev_world, world_size * sizeof(Hittable**));
+    cudaStatus = cudaMalloc(&dev_world, sizeof(Hittable**));
     init_world <<<1,1>>>(dev_world);
     //tracing
-    path_tracing_kernel <<<size / 512 + 1, 512>>>(dev_world, world_size, dev_framebuffer, height, width);
+    path_tracing_kernel <<<size / 512 + 1, 512>>>(dev_world, dev_framebuffer, height, width);
     cudaStatus = cudaGetLastError();
     cudaStatus = cudaDeviceSynchronize();
     cudaStatus = cudaMemcpy(framebuffer, dev_framebuffer, size * sizeof(vec3), cudaMemcpyDeviceToHost);

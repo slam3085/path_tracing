@@ -3,7 +3,7 @@
 #include "hittable_list.h"
 
 
-bool HittableList::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) const 
+__device__  bool HittableList::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) const
 {
     HitRecord temp_rec;
     bool hit_anything = false;
