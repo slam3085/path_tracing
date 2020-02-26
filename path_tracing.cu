@@ -5,9 +5,10 @@
 #include "ray.h"
 #include "sphere.h"
 #include "hittable.h"
-#include "hittable_list.h"
+#include "random.h"
+#include "camera.h"
 
-__global__ void init_world(Hittable** dev_world)
+__global__ void init_common(Hittable** dev_world, Camera** dev_camera)
 {
     if (threadIdx.x == 0 && blockIdx.x == 0)
     {
@@ -15,6 +16,7 @@ __global__ void init_world(Hittable** dev_world)
         list[0] = new Sphere({ 0, 0, -1 }, 0.5);
         list[1] = new Sphere({ 0, -100.5, -1 }, 100);
         *dev_world = new HittableList(list, 2);
+        *dev_camera = new Camera();
     }
 }
 
@@ -35,7 +37,7 @@ __device__ vec3 color(Ray* ray, Hittable** dev_world)
     };
 }
 
-__global__ void path_tracing_kernel(Hittable** dev_world, vec3* dev_framebuffer, int height, int width)
+__global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, vec3* dev_framebuffer, int height, int width, curandState_t* states)
 {
     int size = width * height;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -43,39 +45,46 @@ __global__ void path_tracing_kernel(Hittable** dev_world, vec3* dev_framebuffer,
     {
         int i = idx % width;
         int j = idx / width;
-        // camera
-        vec3 lower_left_corner = { -2, -1, -1 };
-        vec3 horizontal = { 4, 0, 0 };
-        vec3 vertical = { 0, 2, 0 };
-        vec3 origin = { 0, 0, 0 };
-        //ray
-        float u = float(i) / float(width);
-        float v = float(j) / float(height);
-        Ray ray = {
-            origin, 
-            lower_left_corner + horizontal * u + vertical * v
-        };
-        dev_framebuffer[idx] = color(&ray, dev_world);
+        //rand init
+        //curand_init(0, 0, 0, &states[idx]);
+        //just crash o_O
+        //rays
+        int ns = 100;
+        vec3 col = { 0, 0, 0 };
+        for (int s = 0; s < ns; s++)
+        {
+            float u = (float(i) + random_float(&states[idx])) / float(width);
+            float v = (float(j) + random_float(&states[idx])) / float(height);
+            Ray ray = (*dev_camera)->get_ray(u, v);
+            col += color(&ray, dev_world);
+        }
+        col /= float(ns);
+        dev_framebuffer[idx] = col;
     }
 }
 
-cudaError_t path_tracing_with_cuda(vec3* framebuffer, int height, int width)
+void path_tracing_with_cuda(vec3* framebuffer, int height, int width)
 {
-    cudaError_t cudaStatus = cudaSetDevice(0);
+    cudaSetDevice(0);
     //framebuffer
     int size = width * height;
     vec3* dev_framebuffer = 0;
-    cudaStatus = cudaMalloc((void**)&dev_framebuffer, size * sizeof(vec3));
+    cudaMalloc((void**)&dev_framebuffer, size * sizeof(vec3));
+    //camera
+    Camera** dev_camera = 0;
+    cudaMalloc(&dev_camera, sizeof(Camera**));
     //world
     Hittable** dev_world = 0;
-    cudaStatus = cudaMalloc(&dev_world, sizeof(Hittable**));
-    init_world <<<1,1>>>(dev_world);
+    cudaMalloc(&dev_world, sizeof(Hittable**));
+    init_common <<<1,1>>>(dev_world, dev_camera);
+    //various
+    curandState_t* states = 0;
+    cudaMalloc((void**)&states, size * sizeof(curandState_t));
     //tracing
-    path_tracing_kernel <<<size / 512 + 1, 512>>>(dev_world, dev_framebuffer, height, width);
-    cudaStatus = cudaGetLastError();
-    cudaStatus = cudaDeviceSynchronize();
-    cudaStatus = cudaMemcpy(framebuffer, dev_framebuffer, size * sizeof(vec3), cudaMemcpyDeviceToHost);
+    path_tracing_kernel <<<size / 512 + 1, 512>>>(dev_world, dev_camera, dev_framebuffer, height, width, states);
+    cudaDeviceSynchronize();
+    cudaMemcpy(framebuffer, dev_framebuffer, size * sizeof(vec3), cudaMemcpyDeviceToHost);
     cudaFree(dev_framebuffer);
     cudaFree(dev_world);
-    return cudaStatus;
+    cudaFree(dev_camera);
 }

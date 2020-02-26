@@ -1,6 +1,6 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#include "hittable_list.h"
+#include "hittable.h"
 
 
 __device__  bool HittableList::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) const

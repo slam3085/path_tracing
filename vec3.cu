@@ -54,3 +54,11 @@ __device__ vec3& vec3::operator*=(float n)
     Z *= n;
     return *this;
 }
+
+__device__ vec3& vec3::operator/=(float n)
+{
+    X /= n;
+    Y /= n;
+    Z /= n;
+    return *this;
+}

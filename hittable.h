@@ -15,3 +15,12 @@ struct Hittable
 {
     __device__ virtual bool hit(Ray* ray, float t_min, float t_max, HitRecord* rec) const = 0;
 };
+
+struct HittableList : public Hittable
+{
+    Hittable** list;
+    int size;
+    __device__ HittableList() {}
+    __device__ HittableList(Hittable** l, int s) : list(l), size(s) {}
+    __device__ virtual bool hit(Ray* ray, float t_min, float t_max, HitRecord* rec) const;
+};

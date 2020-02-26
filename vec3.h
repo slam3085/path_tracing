@@ -9,6 +9,7 @@ struct vec3
     __device__ vec3 unit_vector() const;
     __device__ vec3& operator+=(const vec3 &v2);
     __device__ vec3& operator*=(float n);
+    __device__ vec3& operator/=(float n);
 };
 
 __device__ vec3 operator+(const vec3& v1, const vec3& v2);
