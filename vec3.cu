@@ -8,6 +8,11 @@ __device__ float vec3::length() const
     return sqrt(X * X + Y * Y + Z * Z);
 }
 
+__device__ float vec3::squared_length() const
+{
+    return X * X + Y * Y + Z * Z;
+}
+
 __device__ vec3 vec3::unit_vector() const
 {
     float l = length();

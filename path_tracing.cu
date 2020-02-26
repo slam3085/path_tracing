@@ -20,20 +20,23 @@ __global__ void init_common(Hittable** dev_world, Camera** dev_camera)
     }
 }
 
-__device__ vec3 color(Ray* ray, Hittable** dev_world)
+__device__ vec3 color(Ray* ray, Hittable** dev_world, curandState_t* state)
 {
+    float multiplier = 1.0;
     HitRecord rec;
-    if((*dev_world)->hit(ray, 0.0, 1E9, &rec))
+    while((*dev_world)->hit(ray, 0.001, 1E38, &rec))
     {
-        vec3 ones = { 1, 1, 1 };
-        return (rec.normal + ones) * 0.5;
+        vec3 target = rec.p + rec.normal + random_unit_in_sphere(state);
+        ray->origin = rec.p;
+        ray->direction = target - rec.p;
+        multiplier *= 0.5;
     }
     vec3 unit_direction = ray->direction.unit_vector();
     float t = 0.5 * (unit_direction.Y + 1.0);
     return {
-        1.0 - t + 0.5 * t,
-        1.0 - t + 0.7 * t,
-        1.0 - t + 1.0 * t
+        multiplier * (1.0 - 0.5 * t),
+        multiplier * (1.0 - 0.3 * t),
+        multiplier
     };
 }
 
@@ -47,18 +50,21 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, v
         int j = idx / width;
         //rand init
         //curand_init(0, 0, 0, &states[idx]);
-        //just crash o_O
+        //crash -_-
         //rays
-        int ns = 100;
+        int ns = 1000;
         vec3 col = { 0, 0, 0 };
         for (int s = 0; s < ns; s++)
         {
             float u = (float(i) + random_float(&states[idx])) / float(width);
             float v = (float(j) + random_float(&states[idx])) / float(height);
             Ray ray = (*dev_camera)->get_ray(u, v);
-            col += color(&ray, dev_world);
+            col += color(&ray, dev_world, &states[idx]);
         }
         col /= float(ns);
+        col.X = sqrt(col.X);
+        col.Y = sqrt(col.Y);
+        col.Z = sqrt(col.Z);
         dev_framebuffer[idx] = col;
     }
 }
