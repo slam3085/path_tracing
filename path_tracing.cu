@@ -7,37 +7,53 @@
 #include "hittable.h"
 #include "random.h"
 #include "camera.h"
+#include "material.h"
 
 __global__ void init_common(Hittable** dev_world, Camera** dev_camera)
 {
     if (threadIdx.x == 0 && blockIdx.x == 0)
     {
-        Hittable** list = new Hittable*[2];
-        list[0] = new Sphere({ 0, 0, -1 }, 0.5);
-        list[1] = new Sphere({ 0, -100.5, -1 }, 100);
-        *dev_world = new HittableList(list, 2);
+        Hittable** list = new Hittable*[4];
+        list[0] = new Sphere({ 0, 0, -1 }, 0.49, new Lambertian({ 0.8, 0.3, 0.3 }));
+        list[1] = new Sphere({ 0, -100.5, -1 }, 99.99, new Lambertian({ 0.8, 0.8, 0.0 }));
+        list[2] = new Sphere({ 1, 0, -1 }, 0.49, new Metal({ 0.8, 0.6, 0.2 }, 0.3));
+        list[3] = new Sphere({ -1, 0, -1 }, 0.49, new Metal({ 0.8, 0.8, 0.8 }, 1.0));
+        *dev_world = new HittableList(list, 4);
         *dev_camera = new Camera();
     }
 }
 
+__global__ void init_curand(curandState_t* states, int height, int width)
+{
+    int size = height * width;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < size)
+        curand_init(1234, idx, 0, &states[idx]);
+}
+
 __device__ vec3 color(Ray* ray, Hittable** dev_world, curandState_t* state)
 {
-    float multiplier = 1.0;
+    int depth = 50;
+    vec3 col = { 1.0, 1.0, 1.0 };
     HitRecord rec;
+    Ray scattered;
+    vec3 attenuation;
     while((*dev_world)->hit(ray, 0.001, 1E38, &rec))
     {
-        vec3 target = rec.p + rec.normal + random_unit_in_sphere(state);
-        ray->origin = rec.p;
-        ray->direction = target - rec.p;
-        multiplier *= 0.5;
+        if (depth && rec.material->scatter(ray, &rec, &attenuation, &scattered, state))
+        {
+            col *= attenuation;
+            depth -= 1;
+            ray = &scattered;
+        }
+        else
+            return { 0, 0, 0 };
     }
     vec3 unit_direction = ray->direction.unit_vector();
     float t = 0.5 * (unit_direction.Y + 1.0);
-    return {
-        multiplier * (1.0 - 0.5 * t),
-        multiplier * (1.0 - 0.3 * t),
-        multiplier
-    };
+    col.X *= (1.0 - 0.5 * t);
+    col.Y *= (1.0 - 0.3 * t);
+    return col;
 }
 
 __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, vec3* dev_framebuffer, int height, int width, curandState_t* states)
@@ -48,9 +64,6 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, v
     {
         int i = idx % width;
         int j = idx / width;
-        //rand init
-        //curand_init(0, 0, 0, &states[idx]);
-        //crash -_-
         //rays
         int ns = 1000;
         vec3 col = { 0, 0, 0 };
@@ -86,8 +99,9 @@ void path_tracing_with_cuda(vec3* framebuffer, int height, int width)
     //various
     curandState_t* states = 0;
     cudaMalloc((void**)&states, size * sizeof(curandState_t));
+    init_curand<<<size / 256 + 1, 256>>>(states, height, width);
     //tracing
-    path_tracing_kernel <<<size / 512 + 1, 512>>>(dev_world, dev_camera, dev_framebuffer, height, width, states);
+    path_tracing_kernel<<<size / 512 + 1, 512>>>(dev_world, dev_camera, dev_framebuffer, height, width, states);
     cudaDeviceSynchronize();
     cudaMemcpy(framebuffer, dev_framebuffer, size * sizeof(vec3), cudaMemcpyDeviceToHost);
     cudaFree(dev_framebuffer);

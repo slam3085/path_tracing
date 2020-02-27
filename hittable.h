@@ -4,11 +4,14 @@
 #include "vec3.h"
 #include "ray.h"
 
+struct Material;
+
 struct HitRecord
 {
     float t;
     vec3 p;
     vec3 normal;
+    Material* material;
 };
 
 struct Hittable

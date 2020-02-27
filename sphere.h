@@ -9,7 +9,8 @@ struct Sphere : public Hittable
 {
     vec3 center;
     float radius;
+    Material* material;
     __device__ __host__ Sphere() {}
-    __device__ __host__ Sphere(vec3 c, float r): center(c), radius(r) {}
+    __device__ __host__ Sphere(vec3 c, float r, Material* m): center(c), radius(r), material(m) {}
     __device__ virtual bool hit(Ray* ray, float t_min, float t_max, HitRecord* rec) const;
 };

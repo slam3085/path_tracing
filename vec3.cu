@@ -29,6 +29,11 @@ __device__ vec3 operator-(const vec3& v1, const vec3& v2)
     return { v1.X - v2.X, v1.Y - v2.Y, v1.Z - v2.Z };
 }
 
+__device__ vec3 operator*(const vec3& v1, const vec3& v2)
+{
+    return { v1.X * v2.X, v1.Y * v2.Y, v1.Z * v2.Z };
+}
+
 __device__ vec3 operator*(const vec3& v1, float n)
 {
     return { v1.X * n, v1.Y * n, v1.Z * n };
@@ -57,6 +62,14 @@ __device__ vec3& vec3::operator*=(float n)
     X *= n;
     Y *= n;
     Z *= n;
+    return *this;
+}
+
+__device__ vec3& vec3::operator*=(const vec3 &v2)
+{
+    X *= v2.X;
+    Y *= v2.Y;
+    Z *= v2.Z;
     return *this;
 }
 
