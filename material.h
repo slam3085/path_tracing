@@ -24,3 +24,10 @@ struct Metal : public Material
     vec3 albedo;
     float fuzziness;
 };
+
+struct Dielectric : public Material
+{
+    __device__ Dielectric(float ri) : ref_idx(ri) {}
+    __device__ virtual bool scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, curandState_t* state) const;
+    float ref_idx;
+};

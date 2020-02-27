@@ -19,6 +19,11 @@ __device__ vec3 vec3::unit_vector() const
     return { X / l, Y / l, Z / l };
 }
 
+__device__ vec3 vec3::operator-() const
+{
+    return { -X, -Y, -Z };
+}
+
 __device__ vec3 operator+(const vec3& v1, const vec3& v2)
 {
     return { v1.X + v2.X, v1.Y + v2.Y, v1.Z + v2.Z };

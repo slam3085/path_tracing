@@ -8,6 +8,7 @@ struct vec3
     __device__ float length() const;
     __device__ float squared_length() const;
     __device__ vec3 unit_vector() const;
+    __device__ vec3 operator-() const;
     __device__ vec3& operator+=(const vec3 &v2);
     __device__ vec3& operator*=(float n);
     __device__ vec3& operator*=(const vec3 &v2);
