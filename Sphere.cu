@@ -17,7 +17,7 @@ __device__ bool Sphere::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) 
         {
             rec->t = temp;
             rec->p = ray->point_at_parameter(rec->t);
-            rec->normal = (rec->p - center).unit_vector();
+            rec->normal = (rec->p - center) / radius;
             rec->material = material;
             return true;
         }
@@ -26,7 +26,7 @@ __device__ bool Sphere::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) 
         {
             rec->t = temp;
             rec->p = ray->point_at_parameter(rec->t);
-            rec->normal = (rec->p - center).unit_vector();
+            rec->normal = (rec->p - center) / radius;
             rec->material = material;
             return true;
         }

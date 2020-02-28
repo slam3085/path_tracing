@@ -13,7 +13,7 @@ __global__ void init_common(Hittable** dev_world, Camera** dev_camera)
 {
     if (threadIdx.x == 0 && blockIdx.x == 0)
     {
-        Hittable** list = new Hittable*[4];
+        Hittable** list = new Hittable*[5];
         list[0] = new Sphere({ 0, 0, -1 }, 0.49, new Lambertian({ 0.1, 0.2, 0.5 }));
         list[1] = new Sphere({ 0, -100.5, -1 }, 99.99, new Lambertian({ 0.8, 0.8, 0.0 }));
         list[2] = new Sphere({ 1, 0, -1 }, 0.49, new Metal({ 0.8, 0.6, 0.2 }, 0.3));
