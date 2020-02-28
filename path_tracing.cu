@@ -14,10 +14,10 @@ __global__ void init_common(Hittable** dev_world, Camera** dev_camera)
     if (threadIdx.x == 0 && blockIdx.x == 0)
     {
         Hittable** list = new Hittable*[5];
-        list[0] = new Sphere({ 0, 0, -1 }, 0.49, new Lambertian({ 0.1, 0.2, 0.5 }));
-        list[1] = new Sphere({ 0, -100.5, -1 }, 99.99, new Lambertian({ 0.8, 0.8, 0.0 }));
-        list[2] = new Sphere({ 1, 0, -1 }, 0.49, new Metal({ 0.8, 0.6, 0.2 }, 0.3));
-        list[3] = new Sphere({ -1, 0, -1 }, 0.49, new Dielectric(1.5));
+        list[0] = new Sphere({ 0, 0, -1 }, 0.5, new Lambertian({ 0.1, 0.2, 0.5 }));
+        list[1] = new Sphere({ 0, -100.5, -1 }, 100, new Lambertian({ 0.8, 0.8, 0.0 }));
+        list[2] = new Sphere({ 1, 0, -1 }, 0.5, new Metal({ 0.8, 0.6, 0.2 }, 0.3));
+        list[3] = new Sphere({ -1, 0, -1 }, 0.5, new Dielectric(1.5));
         list[4] = new Sphere({ -1, 0, -1 }, -0.45, new Dielectric(1.5));
         *dev_world = new HittableList(list, 5);
         *dev_camera = new Camera();
@@ -35,11 +35,11 @@ __global__ void init_curand(curandState_t* states, int height, int width)
 __device__ vec3 color(Ray* ray, Hittable** dev_world, curandState_t* state)
 {
     int depth = 50;
-    vec3 col = { 1.0, 1.0, 1.0 };
+    vec3 col = { 1.0f, 1.0f, 1.0f };
     HitRecord rec;
     Ray scattered;
     vec3 attenuation;
-    while((*dev_world)->hit(ray, 0.001, 1E38, &rec))
+    while((*dev_world)->hit(ray, 0.001f, 1E38f, &rec))
     {
         if (depth && rec.material->scatter(ray, &rec, &attenuation, &scattered, state))
         {
@@ -48,12 +48,12 @@ __device__ vec3 color(Ray* ray, Hittable** dev_world, curandState_t* state)
             ray = &scattered;
         }
         else
-            return { 0, 0, 0 };
+            return { 0.0f, 0.0f, 0.0f };
     }
     vec3 unit_direction = ray->direction.unit_vector();
-    float t = 0.5 * (unit_direction.Y + 1.0);
-    col.X *= (1.0 - 0.5 * t);
-    col.Y *= (1.0 - 0.3 * t);
+    float t = 0.5f * (unit_direction.Y + 1.0f);
+    col.X *= (1.0f - 0.5f * t);
+    col.Y *= (1.0f - 0.3f * t);
     return col;
 }
 
@@ -67,7 +67,7 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, v
         int j = idx / width;
         //rays
         int ns = 1000;
-        vec3 col = { 0, 0, 0 };
+        vec3 col = { 0.0f, 0.0f, 0.0f };
         for (int s = 0; s < ns; s++)
         {
             float u = (float(i) + random_float(&states[idx])) / float(width);

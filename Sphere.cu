@@ -7,12 +7,12 @@ __device__ bool Sphere::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) 
 {
     vec3 oc = ray->origin - center;
     float a = dot(ray->direction, ray->direction);
-    float b = 2.0 * dot(oc, ray->direction);
+    float b = dot(oc, ray->direction);
     float c = dot(oc, oc) - radius * radius;
-    float discriminant = b * b - 4 * a * c;
-    if (discriminant > 0)
+    float discriminant = b * b - a * c;
+    if (discriminant > 0.0f)
     {
-        float temp = (-b - sqrt(discriminant)) / 2.0 / a;
+        float temp = (-b - sqrt(discriminant)) / a;
         if (temp < t_max && temp > t_min)
         {
             rec->t = temp;
@@ -21,7 +21,7 @@ __device__ bool Sphere::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) 
             rec->material = material;
             return true;
         }
-        temp = (-b + sqrt(discriminant)) / 2.0 / a;
+        temp = (-b + sqrt(discriminant)) / a;
         if (temp < t_max && temp > t_min)
         {
             rec->t = temp;
