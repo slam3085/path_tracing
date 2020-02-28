@@ -21,3 +21,4 @@ __device__ vec3 operator*(const vec3& v1, const vec3& v2);
 __device__ vec3 operator*(const vec3& v1, float n);
 __device__ vec3 operator/(const vec3& v1, float n);
 __device__ float dot(const vec3& v1, const vec3& v2);
+__device__ vec3 cross(const vec3& v1, const vec3& v2);
