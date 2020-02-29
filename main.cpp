@@ -4,10 +4,10 @@
 
 int main()
 {
-    const int width = 1960, height = 1080;
+    const int width = 1366, height = 768;
     vec3* framebuffer = new vec3[width * height];
     path_tracing_with_cuda(framebuffer, height, width);
-    std::string filename = "two_spheres.ppm";
+    std::string filename = "spheres.ppm";
     render(filename, framebuffer, height, width);
     delete[] framebuffer;
 }

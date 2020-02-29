@@ -2,8 +2,9 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include "ray.h"
-#include "hittable.h"
+#include "hittable/hittable.h"
 #include "random.h"
+#include "texture.h"
 
 struct Material
 {
@@ -12,9 +13,9 @@ struct Material
 
 struct Lambertian : public Material
 {
-    __device__ Lambertian(const vec3& a): albedo(a) {}
+    __device__ Lambertian(Texture* a): albedo(a) {}
     __device__ virtual bool scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, curandState_t* state) const;
-    vec3 albedo;
+    Texture* albedo;
 };
 
 struct Metal : public Material

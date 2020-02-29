@@ -5,6 +5,9 @@
 struct vec3 
 {
     float X, Y, Z;
+    __device__ vec3() {}
+    __device__ vec3(float x, float y, float z): X(x), Y(y), Z(z) {}
+    __device__ float operator[](int i) const;
     __device__ float length() const;
     __device__ float squared_length() const;
     __device__ vec3 unit_vector() const;

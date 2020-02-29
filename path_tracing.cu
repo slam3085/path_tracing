@@ -4,44 +4,31 @@
 #include "math.h"
 #include "path_tracing.h"
 #include "ray.h"
-#include "sphere.h"
-#include "hittable.h"
+#include "hittable/sphere.h"
+#include "hittable/hittable.h"
 #include "random.h"
 #include "camera.h"
 #include "material.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "ext/stb_image.h"
+#include <iostream>
 
-__global__ void init_common(Hittable** dev_world, Camera** dev_camera, int height, int width, curandState_t* states)
+__global__ void init_common(Hittable** dev_world, unsigned char* dev_tex_data, int nx, int ny, Camera** dev_camera, int height, int width, curandState_t* states)
 {
     if (threadIdx.x == 0 && blockIdx.x == 0)
     {
-        int n = 250;
+        int n = 5;
         Hittable** list = new Hittable*[n + 1];
-        list[0] = new Sphere({ 0, -1000, 0 }, 1000, new Lambertian({ 0.5, 0.5, 0.5 }));
-        int i = 1;
-        vec3 tmp = { 4, 0.2, 0 };
-        for(int a = -5; a < 5; a++)
-            for(int b = -5; b < 5; b++)
-                {
-                    vec3 center = { a + 0.9 * random_float(&states[0]), 0.2, b + 0.9 * random_float(&states[1]) };
-                    if((center - tmp).length() > 0.9)
-                    {
-                        Material* material;
-                        float mat_rnd = random_float(&states[0]);
-                        if (mat_rnd < 0.8)
-                            material = new Lambertian({ random_float(&states[0]) * random_float(&states[1]), random_float(&states[2]) * random_float(&states[3]), random_float(&states[4]) * random_float(&states[5]) });
-                        else if (mat_rnd < 0.95)
-                            material = new Metal({ 0.5f * (1.0f + random_float(&states[0])), 0.5f * (1.0f + random_float(&states[1])), 0.5f * (1.0f + random_float(&states[2])) }, 0.5 * random_float(&states[3]));
-                        else
-                            material = new Dielectric(1.5);
-                        list[i++] = new Sphere(center, 0.2, material);
-                    }
-                    
-                }
-        list[i++] = new Sphere({ 0, 1, 0 }, 1.0, new Metal({ 0.7, 0.6, 0.5 }, 0.0));
-        list[i++] = new Sphere({ -4, 1, 0 }, 1.0, new Lambertian({ 0.4, 0.2, 0.1 }));
-        list[i++] = new Sphere({ 4, 1, 0 }, 1.0, new Dielectric(1.5));
-        list[i++] = new Sphere({ 4, 1, 0 }, -0.95, new Dielectric(1.5));
-        *dev_world = new HittableList(list, i);
+        Texture* checker = new CheckerTexture(
+            new ConstantTexture({ 0.0, 0.0, 0.0 }),
+            new ConstantTexture({ 0.9, 0.9, 0.9 })
+        );
+        list[0] = new Sphere({ 0, -1000, 0 }, 1000, new Lambertian(checker));
+        list[1] = new Sphere({ 0, 1, 0 }, 1.0, new Metal({ 0.7, 0.6, 0.5 }, 0.0));
+        list[2] = new Sphere({ 2, 1, 2 }, 1.0, new Lambertian(new ImageTexture(dev_tex_data, nx, ny)));
+        list[3] = new Sphere({ 4, 1, 0.5 }, 1.0, new Dielectric(1.5));
+        list[4] = new Sphere({ 4, 1, 0.5 }, -0.95, new Dielectric(1.5));
+        *dev_world = new HittableList(list, n);
         *dev_camera = new Camera({ 13, 2, 3 }, { 0, 0, 0 }, { 0, 1, 0 }, 20, float(width) / float(height));
     }
 }
@@ -88,7 +75,7 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, v
         int i = idx % width;
         int j = idx / width;
         //rays
-        int ns = 1000;
+        int ns = 100;
         vec3 col = { 0.0f, 0.0f, 0.0f };
         for (int s = 0; s < ns; s++)
         {
@@ -108,6 +95,12 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, v
 void path_tracing_with_cuda(vec3* framebuffer, int height, int width)
 {
     cudaSetDevice(0);
+    // earth
+    int nx, ny, nn;
+    unsigned char* tex_data = stbi_load("textures/stickor.jpg", &nx, &ny, &nn, 0);
+    unsigned char* dev_tex_data = 0;
+    cudaMalloc((void**)&dev_tex_data, 3 * nx * ny * sizeof(unsigned char));
+    cudaMemcpy(dev_tex_data, tex_data, 3 * nx * ny * sizeof(unsigned char), cudaMemcpyHostToDevice);
     //framebuffer
     int size = width * height;
     vec3* dev_framebuffer = 0;
@@ -122,7 +115,7 @@ void path_tracing_with_cuda(vec3* framebuffer, int height, int width)
     //world
     Hittable** dev_world = 0;
     cudaMalloc(&dev_world, sizeof(Hittable**));
-    init_common <<<1,1>>>(dev_world, dev_camera, height, width, states);
+    init_common <<<1,1>>>(dev_world, dev_tex_data, nx, ny, dev_camera, height, width, states);
     //tracing
     path_tracing_kernel<<<size / 256 + 1, 256>>>(dev_world, dev_camera, dev_framebuffer, height, width, states);
     cudaDeviceSynchronize();

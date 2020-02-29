@@ -8,7 +8,7 @@ __device__ bool Lambertian::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuati
     vec3 target = rec->p + rec->normal + random_unit_in_sphere(state);
     scattered->origin = rec->p;
     scattered->direction = target - rec->p;
-    *attenuation = albedo;
+    *attenuation = albedo->value(rec->u, rec->v, rec->p);
     return true;
 }
 
