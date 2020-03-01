@@ -49,7 +49,6 @@ __device__ float schlick(float cosine, float ref_idx)
 __device__ bool Dielectric::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, curandState_t* state) const
 {
     vec3 outward_normal;
-    vec3 reflected = reflect(ray_in->direction, rec->normal);
     float ni_over_nt;
     *attenuation = { 1.0f, 1.0f, 1.0f };
     vec3 refracted;
@@ -72,7 +71,7 @@ __device__ bool Dielectric::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuati
         reflect_prob = schlick(cosine, ref_idx);
     scattered->origin = rec->p;
     if(random_float(state) < reflect_prob)
-        scattered->direction = reflected;
+        scattered->direction = reflect(ray_in->direction, rec->normal);
     else
         scattered->direction = refracted;
     return true;

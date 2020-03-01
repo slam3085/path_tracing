@@ -10,7 +10,6 @@
 #include "material.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "ext/stb_image.h"
-#include <iostream>
 
 __global__ void init_common(Hittable** dev_world, unsigned char* dev_tex_data, int nx, int ny, Camera** dev_camera, int height, int width, curandState_t* states)
 {
@@ -79,16 +78,16 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, v
         int i = idx % width;
         int j = idx / width;
         //rays
-        int ns = 1000;
+        int rays_per_pixel = 1000;
         vec3 col = { 0.0f, 0.0f, 0.0f };
-        for (int s = 0; s < ns; s++)
+        for (int s = 0; s < rays_per_pixel; s++)
         {
             float u = (float(i) + random_float(&states[idx])) / float(width);
             float v = (float(j) + random_float(&states[idx])) / float(height);
             Ray ray = (*dev_camera)->get_ray(u, v);
             col += color(&ray, dev_world, &states[idx]);
         }
-        col /= float(ns);
+        col /= float(rays_per_pixel);
         col.X = sqrt(col.X);
         col.Y = sqrt(col.Y);
         col.Z = sqrt(col.Z);
@@ -98,6 +97,7 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, v
 
 void path_tracing_with_cuda(vec3* framebuffer, int height, int width)
 {
+    const int n_threads = 512;
     cudaSetDevice(0);
     // earth
     int nx, ny, nn;
@@ -115,13 +115,13 @@ void path_tracing_with_cuda(vec3* framebuffer, int height, int width)
     //curand
     curandState_t* states = 0;
     cudaMalloc((void**)&states, size * sizeof(curandState_t));
-    init_curand<<<size / 256 + 1, 512>>>(states, height, width);
+    init_curand<<<size / n_threads + 1, n_threads>>>(states, height, width);
     //world
     Hittable** dev_world = 0;
     cudaMalloc(&dev_world, sizeof(Hittable**));
     init_common <<<1,1>>>(dev_world, dev_tex_data, nx, ny, dev_camera, height, width, states);
     //tracing
-    path_tracing_kernel<<<size / 256 + 1, 512>>>(dev_world, dev_camera, dev_framebuffer, height, width, states);
+    path_tracing_kernel<<<size / n_threads + 1, n_threads>>>(dev_world, dev_camera, dev_framebuffer, height, width, states);
     cudaDeviceSynchronize();
     cudaMemcpy(framebuffer, dev_framebuffer, size * sizeof(vec3), cudaMemcpyDeviceToHost);
     cudaFree(dev_framebuffer);

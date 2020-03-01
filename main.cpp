@@ -4,7 +4,7 @@
 
 int main()
 {
-    const int width = 1366, height = 768;
+    const int width = 1280, height = 720;
     vec3* framebuffer = new vec3[width * height];
     path_tracing_with_cuda(framebuffer, height, width);
     std::string filename = "spheres.ppm";
