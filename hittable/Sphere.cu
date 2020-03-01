@@ -1,6 +1,6 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#define _USE_MATH_DEFINES
+# define M_PI 3.14159265358979323846f
 #include "math.h"
 #include "sphere.h"
 
@@ -8,8 +8,8 @@ __device__ void get_sphere_uv(const vec3& p, HitRecord* rec)
 {
     float phi = atan2(p.Z, p.X);
     float theta = asin(p.Y);
-    rec->u = 1 - (phi + M_PI) / (2 * M_PI);
-    rec->v = (theta + M_PI / 2) / M_PI;
+    rec->u = 1.0f - (phi + M_PI) / (2.0f * M_PI);
+    rec->v = (theta + M_PI / 2.0f) / M_PI;
 }
 
 __device__ bool Sphere::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) const

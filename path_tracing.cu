@@ -1,6 +1,5 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#define _USE_MATH_DEFINES
 #include "math.h"
 #include "path_tracing.h"
 #include "ray.h"
@@ -18,7 +17,7 @@ __global__ void init_common(Hittable** dev_world, unsigned char* dev_tex_data, i
     if (threadIdx.x == 0 && blockIdx.x == 0)
     {
         int n = 5;
-        Hittable** list = new Hittable*[n + 1];
+        Hittable** list = new Hittable*[n];
         Texture* checker = new CheckerTexture(
             new ConstantTexture({ 0.0, 0.0, 0.0 }),
             new ConstantTexture({ 0.6, 0.6, 0.6 })
@@ -80,7 +79,7 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, v
         int i = idx % width;
         int j = idx / width;
         //rays
-        int ns = 32000;
+        int ns = 1000;
         vec3 col = { 0.0f, 0.0f, 0.0f };
         for (int s = 0; s < ns; s++)
         {
