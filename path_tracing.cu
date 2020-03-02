@@ -5,29 +5,35 @@
 #include "ray.h"
 #include "hittable/sphere.h"
 #include "hittable/hittable.h"
+#include "hittable/rectangle.h"
 #include "random.h"
 #include "camera.h"
 #include "material.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "ext/stb_image.h"
+#include <iostream>
 
 __global__ void init_common(Hittable** dev_world, unsigned char* dev_tex_data, int nx, int ny, Camera** dev_camera, int height, int width, curandState_t* states)
 {
     if (threadIdx.x == 0 && blockIdx.x == 0)
     {
-        int n = 5;
+        
+        Material* red = new Lambertian(new ConstantTexture({ 0.65, 0.05, 0.05 }));
+        Material* white = new Lambertian(new ConstantTexture({ 0.73, 0.73, 0.73 }));
+        Material* green = new Lambertian(new ConstantTexture({ 0.12, 0.45, 0.15 }));
+        Material* light = new DiffuseLight(new ConstantTexture({ 15, 15, 15 }));
+        int n = 8;
         Hittable** list = new Hittable*[n];
-        Texture* checker = new CheckerTexture(
-            new ConstantTexture({ 0.0, 0.0, 0.0 }),
-            new ConstantTexture({ 0.6, 0.6, 0.6 })
-        );
-        list[0] = new Sphere({ 0, -1000, 0 }, 1000, new Lambertian(checker));
-        list[1] = new Sphere({ 2, 1, -1 }, 1.0, new Metal({ 1.0, 1.0, 1.0 }, 0.0));
-        list[2] = new Sphere({ 2, 1, 2 }, 1.0, new Lambertian(new ImageTexture(dev_tex_data, nx, ny)));
-        list[3] = new Sphere({ 4, 1, 0.5 }, 1.0, new Dielectric(1.5));
-        list[4] = new Sphere({ 8, 8, -4 }, 1.0, new DiffuseLight(new ConstantTexture({ 10.0f, 10.0f, 10.0f })));
+        list[0] = new YZRect(0, 555, 0, 555, 555, -1, green);
+        list[1] = new YZRect(0, 555, 0, 555, 0, 1, red);
+        list[2] = new XZRect(213, 343, 227, 332, 554, 1, light);
+        list[3] = new XZRect(0, 555, 0, 555, 555, -1, white);
+        list[4] = new XZRect(0, 555, 0, 555, 0, 1, white);
+        list[5] = new XYRect(0, 555, 0, 555, 555, -1, white);
+        list[6] = new Box({ 130, 0, 65 }, { 295, 165, 230}, white);
+        list[7] = new Box({ 265, 0, 295 }, { 430, 330, 460 }, white);
         *dev_world = new HittableList(list, n);
-        *dev_camera = new Camera({ 13, 2, 3 }, { 0, 0, 0 }, { 0, 1, 0 }, 20, float(width) / float(height));
+        *dev_camera = new Camera({ 278, 278, -800 }, { 278,278,0 }, { 0, 1, 0 }, 40, float(width) / float(height));
     }
 }
 
@@ -69,7 +75,7 @@ __device__ vec3 color(Ray* ray, Hittable** dev_world, curandState_t* state)
     return col;
 }
 
-__global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, vec3* dev_framebuffer, int height, int width, curandState_t* states)
+__global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, vec3* dev_framebuffer, int height, int width, curandState_t* states, int rays_per_pixel)
 {
     int size = width * height;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -77,8 +83,6 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, v
     {
         int i = idx % width;
         int j = idx / width;
-        //rays
-        int rays_per_pixel = 1000;
         vec3 col = { 0.0f, 0.0f, 0.0f };
         for (int s = 0; s < rays_per_pixel; s++)
         {
@@ -87,15 +91,15 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, v
             Ray ray = (*dev_camera)->get_ray(u, v);
             col += color(&ray, dev_world, &states[idx]);
         }
-        col /= float(rays_per_pixel);
-        col.X = sqrt(col.X);
-        col.Y = sqrt(col.Y);
-        col.Z = sqrt(col.Z);
+        //col /= float(rays_per_pixel);
+        //col.X = sqrt(col.X);
+        //col.Y = sqrt(col.Y);
+        //col.Z = sqrt(col.Z);
         dev_framebuffer[idx] = col;
     }
 }
 
-void path_tracing_with_cuda(vec3* framebuffer, int height, int width)
+void path_tracing_with_cuda(std::string filename, int height, int width)
 {
     const int n_threads = 512;
     cudaSetDevice(0);
@@ -107,6 +111,7 @@ void path_tracing_with_cuda(vec3* framebuffer, int height, int width)
     cudaMemcpy(dev_tex_data, tex_data, 3 * nx * ny * sizeof(unsigned char), cudaMemcpyHostToDevice);
     //framebuffer
     int size = width * height;
+    vec3* framebuffer = (vec3*)malloc(size * sizeof(vec3));
     vec3* dev_framebuffer = 0;
     cudaMalloc((void**)&dev_framebuffer, size * sizeof(vec3));
     //camera
@@ -121,10 +126,20 @@ void path_tracing_with_cuda(vec3* framebuffer, int height, int width)
     cudaMalloc(&dev_world, sizeof(Hittable**));
     init_common <<<1,1>>>(dev_world, dev_tex_data, nx, ny, dev_camera, height, width, states);
     //tracing
-    path_tracing_kernel<<<size / n_threads + 1, n_threads>>>(dev_world, dev_camera, dev_framebuffer, height, width, states);
-    cudaDeviceSynchronize();
-    cudaMemcpy(framebuffer, dev_framebuffer, size * sizeof(vec3), cudaMemcpyDeviceToHost);
+    int rays_per_pixel = 128;
+    int total_rays_per_pixel = 0;
+    while(total_rays_per_pixel < 1000)
+    {
+        path_tracing_kernel<<<size / n_threads + 1, n_threads >>>(dev_world, dev_camera, dev_framebuffer, height, width, states, rays_per_pixel);
+        cudaDeviceSynchronize();
+        total_rays_per_pixel += rays_per_pixel;
+        cudaMemcpy(framebuffer, dev_framebuffer, size * sizeof(vec3), cudaMemcpyDeviceToHost);
+        render(filename, framebuffer, height, width, total_rays_per_pixel);
+        rays_per_pixel = total_rays_per_pixel;
+        std::cout << total_rays_per_pixel << " iterations passed\n";
+    }
     cudaFree(dev_framebuffer);
     cudaFree(dev_world);
     cudaFree(dev_camera);
+    free(framebuffer);
 }
