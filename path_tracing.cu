@@ -1,3 +1,4 @@
+#include <SFML/Graphics.hpp>
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include "math.h"
@@ -17,7 +18,6 @@ __global__ void init_common(Hittable** dev_world, unsigned char* dev_tex_data, i
 {
     if (threadIdx.x == 0 && blockIdx.x == 0)
     {
-        
         Material* red = new Lambertian(new ConstantTexture({ 0.65, 0.05, 0.05 }));
         Material* white = new Lambertian(new ConstantTexture({ 0.73, 0.73, 0.73 }));
         Material* green = new Lambertian(new ConstantTexture({ 0.12, 0.45, 0.15 }));
@@ -75,7 +75,9 @@ __device__ vec3 color(Ray* ray, Hittable** dev_world, curandState_t* state)
     return col;
 }
 
-__global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, vec3* dev_framebuffer, int height, int width, curandState_t* states, int rays_per_pixel)
+__global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, 
+    vec3* framebuffer, unsigned char* pixels, int height, int width, 
+    curandState_t* states, int rays_per_pixel, int total_rays_per_pixel)
 {
     int size = width * height;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -91,11 +93,19 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, v
             Ray ray = (*dev_camera)->get_ray(u, v);
             col += color(&ray, dev_world, &states[idx]);
         }
-        //col /= float(rays_per_pixel);
-        //col.X = sqrt(col.X);
-        //col.Y = sqrt(col.Y);
-        //col.Z = sqrt(col.Z);
-        dev_framebuffer[idx] = col;
+        framebuffer[idx] += col;
+        col = framebuffer[idx];
+        float n_rays = float(total_rays_per_pixel + rays_per_pixel);
+        int r = int(255.99f * sqrt(col.X / n_rays));
+        if(r > 255) r = 255;
+        int g = int(255.99f * sqrt(col.Y / n_rays));
+        if(g > 255) g = 255;
+        int b = int(255.99f * sqrt(col.Z / n_rays));
+        if(b > 255) b = 255;
+        pixels[4 * ((height - 1 - j) * width + i)] = r;
+        pixels[4 * ((height - 1 - j) * width + i) + 1] = g;
+        pixels[4 * ((height - 1 - j) * width + i) + 2] = b;
+        pixels[4 * ((height - 1 - j) * width + i) + 3] = 255;
     }
 }
 
@@ -111,9 +121,8 @@ void path_tracing_with_cuda(std::string filename, int height, int width)
     cudaMemcpy(dev_tex_data, tex_data, 3 * nx * ny * sizeof(unsigned char), cudaMemcpyHostToDevice);
     //framebuffer
     int size = width * height;
-    vec3* framebuffer = (vec3*)malloc(size * sizeof(vec3));
-    vec3* dev_framebuffer = 0;
-    cudaMalloc((void**)&dev_framebuffer, size * sizeof(vec3));
+    vec3* framebuffer = 0;
+    cudaMallocManaged(&framebuffer, size * sizeof(vec3));
     //camera
     Camera** dev_camera = 0;
     cudaMalloc(&dev_camera, sizeof(Camera**));
@@ -125,21 +134,38 @@ void path_tracing_with_cuda(std::string filename, int height, int width)
     Hittable** dev_world = 0;
     cudaMalloc(&dev_world, sizeof(Hittable**));
     init_common <<<1,1>>>(dev_world, dev_tex_data, nx, ny, dev_camera, height, width, states);
+    //SFML
+    unsigned char* pixels = 0;
+    cudaMallocManaged(&pixels, 4 * size * sizeof(unsigned char));
+    sf::RenderWindow window(sf::VideoMode(width, height), "path tracing");
+    sf::Texture texture;
+    texture.create(width, height);
+    sf::Sprite sprite(texture);
     //tracing
-    int rays_per_pixel = 128;
+    int rays_per_pixel = 5;
     int total_rays_per_pixel = 0;
-    while(total_rays_per_pixel < 1000)
+    while(window.isOpen())
     {
-        path_tracing_kernel<<<size / n_threads + 1, n_threads >>>(dev_world, dev_camera, dev_framebuffer, height, width, states, rays_per_pixel);
+        sf::Event event;
+        while(window.pollEvent(event))
+        {
+            if(event.type == sf::Event::Closed)
+                window.close();
+        }
+        path_tracing_kernel<<<size / n_threads + 1, n_threads>>>(dev_world, dev_camera, framebuffer, pixels, height, width, states, rays_per_pixel, total_rays_per_pixel);
         cudaDeviceSynchronize();
         total_rays_per_pixel += rays_per_pixel;
-        cudaMemcpy(framebuffer, dev_framebuffer, size * sizeof(vec3), cudaMemcpyDeviceToHost);
-        render(filename, framebuffer, height, width, total_rays_per_pixel);
-        rays_per_pixel = total_rays_per_pixel;
-        std::cout << total_rays_per_pixel << " iterations passed\n";
+        texture.update((sf::Uint8*)pixels);
+        window.clear();
+        window.draw(sprite);
+        window.display();
+        if(total_rays_per_pixel > 1000)
+            break;
     }
-    cudaFree(dev_framebuffer);
+    render(filename, framebuffer, height, width, total_rays_per_pixel);
+    cudaFree(framebuffer);
     cudaFree(dev_world);
     cudaFree(dev_camera);
-    free(framebuffer);
+    cudaFree(framebuffer);
+    cudaFree(pixels);
 }
