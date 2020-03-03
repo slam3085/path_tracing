@@ -3,10 +3,7 @@
 __device__ float random_float(curandState_t* state)
 {
     //curand_uniform returns values from (0.0, 1.0]
-    float tmp = curand_uniform(state);
-    if(tmp >= 1.0f)
-        return 0.0f;
-    return tmp;
+    return 1.0f - curand_uniform(state);
 }
 
 __device__ vec3 random_unit_in_sphere(curandState_t* state)
