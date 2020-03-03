@@ -142,7 +142,7 @@ void path_tracing_with_cuda(std::string filename, int height, int width)
     texture.create(width, height);
     sf::Sprite sprite(texture);
     //tracing
-    int rays_per_pixel = 5;
+    int rays_per_pixel = 100;
     int total_rays_per_pixel = 0;
     while(window.isOpen())
     {
@@ -162,10 +162,11 @@ void path_tracing_with_cuda(std::string filename, int height, int width)
         if(total_rays_per_pixel > 1000)
             break;
     }
-    render(filename, framebuffer, height, width, total_rays_per_pixel);
+    sf::Image final_pic;
+    final_pic.create(width, height, (sf::Uint8*)pixels);
+    final_pic.saveToFile(filename);
     cudaFree(framebuffer);
     cudaFree(dev_world);
     cudaFree(dev_camera);
-    cudaFree(framebuffer);
     cudaFree(pixels);
 }
