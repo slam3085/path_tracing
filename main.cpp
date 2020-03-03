@@ -4,7 +4,7 @@
 
 int main()
 {
-    const int width = 1280, height = 720;
+    const int width = 1600, height = 900;
     std::string filename = "boxes.png";
     path_tracing_with_cuda(filename, height, width);
 }

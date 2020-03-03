@@ -7,6 +7,7 @@
 #include "hittable/sphere.h"
 #include "hittable/hittable.h"
 #include "hittable/rectangle.h"
+#include "hittable/transformations.h"
 #include "random.h"
 #include "camera.h"
 #include "material.h"
@@ -30,8 +31,8 @@ __global__ void init_common(Hittable** dev_world, unsigned char* dev_tex_data, i
         list[3] = new XZRect(0, 555, 0, 555, 555, -1, white);
         list[4] = new XZRect(0, 555, 0, 555, 0, 1, white);
         list[5] = new XYRect(0, 555, 0, 555, 555, -1, white);
-        list[6] = new Box({ 130, 0, 65 }, { 295, 165, 230}, white);
-        list[7] = new Box({ 265, 0, 295 }, { 430, 330, 460 }, white);
+        list[6] = new Translate(new RotateY(new Box({ 0, 0, 0 }, { 165, 165, 165 }, white), -18), { 130,0,65 });
+        list[7] = new Translate(new RotateY(new Box({ 0, 0, 0 }, { 165, 330, 165 }, white), 15), { 265,0,295 });
         *dev_world = new HittableList(list, n);
         *dev_camera = new Camera({ 278, 278, -800 }, { 278,278,0 }, { 0, 1, 0 }, 40, float(width) / float(height));
     }
@@ -142,9 +143,9 @@ void path_tracing_with_cuda(std::string filename, int height, int width)
     texture.create(width, height);
     sf::Sprite sprite(texture);
     //tracing
-    int rays_per_pixel = 100;
+    int rays_per_pixel = 5;
     int total_rays_per_pixel = 0;
-    while(window.isOpen())
+    while(window.isOpen() && total_rays_per_pixel < 1000)
     {
         sf::Event event;
         while(window.pollEvent(event))
@@ -159,8 +160,6 @@ void path_tracing_with_cuda(std::string filename, int height, int width)
         window.clear();
         window.draw(sprite);
         window.display();
-        if(total_rays_per_pixel > 1000)
-            break;
     }
     sf::Image final_pic;
     final_pic.create(width, height, (sf::Uint8*)pixels);

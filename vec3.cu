@@ -16,6 +16,19 @@ __device__ float vec3::operator[](int i) const
     }
 }
 
+__device__ float& vec3::operator[](int i)
+{
+    switch (i)
+    {
+    case 0:
+        return X;
+    case 1:
+        return Y;
+    case 2:
+        return Z;
+    }
+}
+
 __device__ float vec3::length() const
 {
     return sqrt(X * X + Y * Y + Z * Z);
