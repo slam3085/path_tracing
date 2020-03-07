@@ -26,7 +26,7 @@ struct CheckerTexture : public Texture
     __device__ CheckerTexture(Texture* e, Texture* o) : even(e), odd(o) {}
     __device__ virtual vec3 value(float u, float v, const vec3& p) const
     {
-        float sines = sin(10.0f * p.X) * sin(10.0f * p.Y) * sin(10.0f * p.Z);
+        float sines = sinf(10.0f * p.X) * sinf(10.0f * p.Y) * sinf(10.0f * p.Z);
         if (sines < 0.0f)
             return odd->value(u, v, p);
         else

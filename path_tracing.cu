@@ -11,11 +11,13 @@
 #include "random.h"
 #include "camera.h"
 #include "material.h"
-#define STB_IMAGE_IMPLEMENTATION
-#include "ext/stb_image.h"
+#include <float.h>
 #include <iostream>
+#include <chrono>
+#define NTHREADS 128
+#define MAX_DEPTH 10
 
-__global__ void init_common(Hittable** dev_world, unsigned char* dev_tex_data, int nx, int ny, Camera** dev_camera, int height, int width, curandState_t* states)
+__global__ void init_common(Hittable** dev_world, Camera** dev_camera, int height, int width, curandState_t* states)
 {
     if (threadIdx.x == 0 && blockIdx.x == 0)
     {
@@ -46,34 +48,18 @@ __global__ void init_curand(curandState_t* states, int height, int width)
         curand_init(1234, idx, 0, &states[idx]);
 }
 
-__device__ vec3 color(Ray* ray, Hittable** dev_world, curandState_t* state)
+__device__ vec3 color(Ray* ray, Hittable** dev_world, int depth, curandState_t* state, HitRecord& rec)
 {
-    HitRecord rec;
-    const int depth = 50;
-    int iters = 0;
-    vec3 attenuation_stack[depth + 1];
-    vec3 emitted_stack[depth + 1];
-    int filled = 0;
-    Ray scattered;
-    while((*dev_world)->hit(ray, 0.001f, 1E38f, &rec))
+    if((*dev_world)->hit(ray, 0.001f, FLT_MAX, &rec))
     {
-        emitted_stack[iters] = rec.material->emitted(rec.u, rec.v, rec.p);
-        filled += 1;
-        if(iters < depth && rec.material->scatter(ray, &rec, &attenuation_stack[iters], &scattered, state))
-        {
-            ray = &scattered;
-            iters += 1;
-        }
-        else
-        {
-            attenuation_stack[iters] = { 0.0f, 0.0f, 0.0f };
-            break;
-        }
+        Ray scattered;
+        vec3 attenuation;
+        vec3 emitted = rec.material->emitted(rec.u, rec.v, rec.p);
+        if (depth < MAX_DEPTH && rec.material->scatter(ray, &rec, &attenuation, &scattered, state))
+            return emitted + attenuation * color(&scattered, dev_world, depth + 1, state, rec);
+        return emitted;
     }
-    vec3 col = { 0.0f, 0.0f, 0.0f };
-    for(int i = filled - 1; i >= 0; i--)
-        col = emitted_stack[i] + attenuation_stack[i] * col;
-    return col;
+    return vec3(0.0f, 0.0f, 0.0f);
 }
 
 __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera, 
@@ -82,68 +68,69 @@ __global__ void path_tracing_kernel(Hittable** dev_world, Camera** dev_camera,
 {
     int size = width * height;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < size)
+    if(idx >= size) return;
+    int i = idx % width;
+    int j = idx / width;
+    int t = threadIdx.x;
+    __shared__ vec3 col[NTHREADS];
+    col[t] = { 0.0f, 0.0f, 0.0f };
+    __shared__ Ray ray[NTHREADS];
+    __shared__ curandState_t local_state[NTHREADS];
+    local_state[t] = states[idx];
+    __shared__ HitRecord rec[NTHREADS];
+    //path tracing iterations
+    for (int s = 0; s < rays_per_pixel; s++)
     {
-        int i = idx % width;
-        int j = idx / width;
-        vec3 col = { 0.0f, 0.0f, 0.0f };
-        for (int s = 0; s < rays_per_pixel; s++)
-        {
-            float u = (float(i) + random_float(&states[idx])) / float(width);
-            float v = (float(j) + random_float(&states[idx])) / float(height);
-            Ray ray = (*dev_camera)->get_ray(u, v);
-            col += color(&ray, dev_world, &states[idx]);
-        }
-        framebuffer[idx] += col;
-        col = framebuffer[idx];
-        float n_rays = float(total_rays_per_pixel + rays_per_pixel);
-        int r = int(255.99f * sqrt(col.X / n_rays));
-        if(r > 255) r = 255;
-        int g = int(255.99f * sqrt(col.Y / n_rays));
-        if(g > 255) g = 255;
-        int b = int(255.99f * sqrt(col.Z / n_rays));
-        if(b > 255) b = 255;
-        pixels[4 * ((height - 1 - j) * width + i)] = r;
-        pixels[4 * ((height - 1 - j) * width + i) + 1] = g;
-        pixels[4 * ((height - 1 - j) * width + i) + 2] = b;
-        pixels[4 * ((height - 1 - j) * width + i) + 3] = 255;
+        float u = (float(i) + random_float(&local_state[t])) / float(width);
+        float v = (float(j) + random_float(&local_state[t])) / float(height);
+        ray[t] = (*dev_camera)->get_ray(u, v);
+        col[t] += color(&ray[t], dev_world, 0, &local_state[t], rec[t]);
     }
+    //calc color and put to global buffers
+    framebuffer[idx] += col[t];
+    col[t] = framebuffer[idx];
+    float n_rays = float(total_rays_per_pixel + rays_per_pixel);
+    int r = int(255.99f * sqrtf(col[t].X / n_rays));
+    if(r > 255) r = 255;
+    int g = int(255.99f * sqrtf(col[t].Y / n_rays));
+    if(g > 255) g = 255;
+    int b = int(255.99f * sqrtf(col[t].Z / n_rays));
+    if(b > 255) b = 255;
+    pixels[4 * ((height - 1 - j) * width + i)] = r;
+    pixels[4 * ((height - 1 - j) * width + i) + 1] = g;
+    pixels[4 * ((height - 1 - j) * width + i) + 2] = b;
+    //copy from shared to global memory
+    states[idx] = local_state[t];
 }
 
 void path_tracing_with_cuda(std::string filename, int height, int width)
 {
-    const int n_threads = 512;
     cudaSetDevice(0);
-    // earth
-    int nx, ny, nn;
-    unsigned char* tex_data = stbi_load("textures/stickor.jpg", &nx, &ny, &nn, 0);
-    unsigned char* dev_tex_data = 0;
-    cudaMalloc((void**)&dev_tex_data, 3 * nx * ny * sizeof(unsigned char));
-    cudaMemcpy(dev_tex_data, tex_data, 3 * nx * ny * sizeof(unsigned char), cudaMemcpyHostToDevice);
     //framebuffer
     int size = width * height;
     vec3* framebuffer = 0;
-    cudaMallocManaged(&framebuffer, size * sizeof(vec3));
+    cudaMalloc(&framebuffer, size * sizeof(vec3));
+    unsigned char* pixels = 0;
+    cudaMallocManaged(&pixels, 4 * size * sizeof(unsigned char));
+    cudaMemset(pixels, 255, 4 * size * sizeof(unsigned char));
     //camera
     Camera** dev_camera = 0;
     cudaMalloc(&dev_camera, sizeof(Camera**));
     //curand
     curandState_t* states = 0;
     cudaMalloc((void**)&states, size * sizeof(curandState_t));
-    init_curand<<<size / n_threads + 1, n_threads>>>(states, height, width);
+    init_curand<<<size / NTHREADS + 1, NTHREADS>>>(states, height, width);
     //world
     Hittable** dev_world = 0;
     cudaMalloc(&dev_world, sizeof(Hittable**));
-    init_common <<<1,1>>>(dev_world, dev_tex_data, nx, ny, dev_camera, height, width, states);
+    init_common <<<1,1>>>(dev_world, dev_camera, height, width, states);
     //SFML
-    unsigned char* pixels = 0;
-    cudaMallocManaged(&pixels, 4 * size * sizeof(unsigned char));
     sf::RenderWindow window(sf::VideoMode(width, height), "path tracing");
     sf::Texture texture;
     texture.create(width, height);
     sf::Sprite sprite(texture);
     //tracing
-    int rays_per_pixel = 5;
+    int rays_per_pixel = 50;
     int total_rays_per_pixel = 0;
     while(window.isOpen() && total_rays_per_pixel < 1000)
     {
@@ -153,8 +140,12 @@ void path_tracing_with_cuda(std::string filename, int height, int width)
             if(event.type == sf::Event::Closed)
                 window.close();
         }
-        path_tracing_kernel<<<size / n_threads + 1, n_threads>>>(dev_world, dev_camera, framebuffer, pixels, height, width, states, rays_per_pixel, total_rays_per_pixel);
+        auto start = std::chrono::steady_clock::now();
+        path_tracing_kernel << <size / NTHREADS + 1, NTHREADS >> > (dev_world, dev_camera, framebuffer, pixels, height, width, states, rays_per_pixel, total_rays_per_pixel);
         cudaDeviceSynchronize();
+        auto end = std::chrono::steady_clock::now();
+        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        std::cout <<  float(width * height * rays_per_pixel) / float(diff * 1000) << " Mrays/s" << std::endl;
         total_rays_per_pixel += rays_per_pixel;
         texture.update((sf::Uint8*)pixels);
         window.clear();

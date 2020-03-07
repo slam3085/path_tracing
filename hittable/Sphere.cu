@@ -6,8 +6,8 @@
 
 __device__ void get_sphere_uv(const vec3& p, HitRecord* rec)
 {
-    float phi = atan2(p.Z, p.X);
-    float theta = asin(p.Y);
+    float phi = atan2f(p.Z, p.X);
+    float theta = asinf(p.Y);
     rec->u = 1.0f - (phi + M_PI) / (2.0f * M_PI);
     rec->v = (theta + M_PI / 2.0f) / M_PI;
 }
@@ -21,7 +21,7 @@ __device__ bool Sphere::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) 
     float discriminant = b * b - a * c;
     if (discriminant > 0.0f)
     {
-        float temp = (-b - sqrt(discriminant)) / a;
+        float temp = (-b - sqrtf(discriminant)) / a;
         if (temp < t_max && temp > t_min)
         {
             rec->t = temp;
@@ -31,7 +31,7 @@ __device__ bool Sphere::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) 
             get_sphere_uv((rec->p - center) / radius, rec);
             return true;
         }
-        temp = (-b + sqrt(discriminant)) / a;
+        temp = (-b + sqrtf(discriminant)) / a;
         if (temp < t_max && temp > t_min)
         {
             rec->t = temp;

@@ -8,13 +8,9 @@ __device__ float random_float(curandState_t* state)
 
 __device__ vec3 random_unit_in_sphere(curandState_t* state)
 {
-    vec3 p;
-    while(true)
-    {
-        p.X = 2.0f * random_float(state) - 1.0f;
-        p.Y = 2.0f * random_float(state) - 1.0f;
-        p.Z = 2.0f * random_float(state) - 1.0f;
-        if(p.squared_length() < 1.0f)
-            return p;
-    }
+    vec3 p(2.0f * random_float(state) - 1.0f, 2.0f * random_float(state) - 1.0f, 2.0f * random_float(state) - 1.0f);
+    float a = 2.0f * random_float(state) - 1.0f, b = 2.0f * random_float(state) - 1.0f;
+    float l = sqrtf(p.squared_length() + a * a + b * b);
+    p /= l;
+    return p;
 }

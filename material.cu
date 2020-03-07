@@ -5,9 +5,8 @@
 
 __device__ bool Lambertian::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, curandState_t* state) const
 {
-    vec3 target = rec->p + rec->normal + random_unit_in_sphere(state);
     scattered->origin = rec->p;
-    scattered->direction = target - rec->p;
+    scattered->direction = rec->normal + random_unit_in_sphere(state);
     *attenuation = albedo->value(rec->u, rec->v, rec->p);
     return true;
 }
@@ -19,9 +18,8 @@ __device__ vec3 reflect(const vec3& v, const vec3& n)
 
 __device__ bool Metal::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, curandState_t* state) const
 {
-    vec3 reflected = reflect(ray_in->direction.unit_vector(), rec->normal);
     scattered->origin = rec->p;
-    scattered->direction = reflected + random_unit_in_sphere(state) * fuzziness;
+    scattered->direction = reflect(ray_in->direction.unit_vector(), rec->normal) + random_unit_in_sphere(state) * fuzziness;
     *attenuation = albedo;
     return dot(scattered->direction, rec->normal) > 0.0f;
 }
@@ -33,7 +31,7 @@ __device__ bool refract(const vec3& v, const vec3& n, float ni_over_nt, vec3* re
     float discriminant = 1.0f - ni_over_nt * ni_over_nt * (1.0f - dt * dt);
     if(discriminant > 0.0f)
     {
-        *refracted = (uv - n * dt) * ni_over_nt - n * sqrt(discriminant);
+        *refracted = (uv - n * dt) * ni_over_nt - n * sqrtf(discriminant);
         return true;
     }
     return false;
@@ -43,7 +41,7 @@ __device__ float schlick(float cosine, float ref_idx)
 {
     float r0 = (1.0f - ref_idx) / (1.0f + ref_idx);
     r0 *= r0;
-    return r0 + (1.0f - r0) * pow((1.0f - cosine), 5);
+    return r0 + (1.0f - r0) * (1.0f - cosine) * (1.0f - cosine) * (1.0f - cosine) * (1.0f - cosine) * (1.0f - cosine);
 }
 
 __device__ bool Dielectric::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, curandState_t* state) const
@@ -59,7 +57,7 @@ __device__ bool Dielectric::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuati
         outward_normal = -(rec->normal);
         ni_over_nt = ref_idx;
         cosine = dot(ray_in->direction, rec->normal) / ray_in->direction.length();
-        cosine = sqrt(1.0f - ref_idx * ref_idx * (1.0f - cosine * cosine));
+        cosine = sqrtf(1.0f - ref_idx * ref_idx * (1.0f - cosine * cosine));
     }
     else
     {

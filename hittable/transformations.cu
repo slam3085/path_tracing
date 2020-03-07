@@ -1,3 +1,4 @@
+#include <float.h>
 #include "math.h"
 #include "transformations.h"
 # define M_PI 3.14159265358979323846f
@@ -29,8 +30,8 @@ __device__ RotateY::RotateY(Hittable* h, float angle) : hittable(h)
     sin_theta = sin(radians);
     cos_theta = cos(radians);
     hasbox = hittable->bounding_box(0, 1, &bbox);
-    vec3 min = { 1E38f, 1E38f, 1E38f };
-    vec3 max = {-1E38f, -1E38f , -1E38f };
+    vec3 min = { FLT_MAX, FLT_MAX, FLT_MAX };
+    vec3 max = {-FLT_MAX, -FLT_MAX , -FLT_MAX };
     vec3 tester;
     for (int i = 0; i < 2; i++) {
         for (int j = 0; j < 2; j++) {

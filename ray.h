@@ -6,5 +6,10 @@
 struct Ray 
 {
     vec3 origin, direction;
-    __device__ vec3 point_at_parameter(float t) const;
+    __device__ __forceinline__ Ray(){}
+    __device__ __forceinline__ Ray(const vec3& o, const vec3& d): origin(o), direction(d) {}
+    __device__ __forceinline__ vec3 point_at_parameter(float t) const
+    {
+        return origin + direction * t;
+    }
 };
