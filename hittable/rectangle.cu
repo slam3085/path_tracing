@@ -1,3 +1,5 @@
+#include <float.h>
+#include "math.h"
 #include "rectangle.h"
 
 __device__ bool XYRect::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) const
@@ -46,6 +48,30 @@ __device__ bool XZRect::bounding_box(float t0, float t1, AABB* box) const
 {
     *box = AABB({ x_0, k - 0.0001f, z_0 }, { x_1, k + 0.0001f, z_1,  });
     return true;
+}
+
+__device__ float XZRect::pdf_value(const vec3& origin, const vec3& direction) const
+{
+    HitRecord rec;
+    Ray ray(origin, direction);
+    if(this->hit(&ray, 0.001f, FLT_MAX, &rec))
+    {
+        float area = (x_1 - x_0) * (z_1 - z_0);
+        float distance_squared = rec.t * rec.t * direction.squared_length();
+        float cosine = fabs(dot(direction, rec.normal) / direction.length());
+        return distance_squared / (cosine * area);
+    }
+    return 0.0f;
+}
+
+__device__ vec3 XZRect::random(const vec3& origin, curandState_t* state) const
+{
+    vec3 random_point = vec3(
+        x_0 + random_float(state) * (x_1 - x_0),
+        k,
+        z_0 + random_float(state) * (z_1 - z_0)
+    );
+    return random_point - origin;
 }
 
 __device__ bool YZRect::hit(Ray* ray, float t_min, float t_max, HitRecord* rec) const

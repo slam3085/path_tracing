@@ -1,6 +1,6 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-# define M_PI 3.14159265358979323846f
+#define M_PI 3.14159265358979323846f
 #include "math.h"
 #include "sphere.h"
 

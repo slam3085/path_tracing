@@ -116,3 +116,12 @@ __device__ __forceinline__ vec3 cross(const vec3& v1, const vec3& v2)
     v1.X * v2.Y - v1.Y * v2.X
     );
 }
+
+__device__ __forceinline__ vec3 de_nan(const vec3& c)
+{
+    vec3 temp = c;
+    if (!(temp[0] == temp[0])) temp[0] = 0;
+    if (!(temp[1] == temp[1])) temp[1] = 0;
+    if (!(temp[2] == temp[2])) temp[2] = 0;
+    return temp;
+}

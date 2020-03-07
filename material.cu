@@ -2,13 +2,27 @@
 #include "device_launch_parameters.h"
 #include "material.h"
 #include "random.h"
+#include "onb.h"
+#define M_PI 3.14159265358979323846f
 
-__device__ bool Lambertian::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, curandState_t* state) const
+__device__ bool Lambertian::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, float& pdf, curandState_t* state) const
 {
+    ONB uvw;
+    uvw.build_from_w(rec->normal);
+    vec3 direction = uvw.local(random_cosine_direction(state));
     scattered->origin = rec->p;
-    scattered->direction = rec->normal + random_unit_in_sphere(state);
+    scattered->direction = direction.unit_vector();
     *attenuation = albedo->value(rec->u, rec->v, rec->p);
+    pdf = dot(uvw.w, scattered->direction) / M_PI;
     return true;
+}
+
+__device__ float Lambertian::scattering_pdf(Ray* ray_in, HitRecord* rec, Ray* scattered) const
+{
+    float cosine = dot(rec->normal, scattered->direction.unit_vector());
+    if(cosine < 0.0f)
+        return 0.0f;
+    return cosine / M_PI;
 }
 
 __device__ vec3 reflect(const vec3& v, const vec3& n)
@@ -16,10 +30,10 @@ __device__ vec3 reflect(const vec3& v, const vec3& n)
     return v - n * 2.0f * dot(v, n);
 }
 
-__device__ bool Metal::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, curandState_t* state) const
+__device__ bool Metal::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, float& pdf, curandState_t* state) const
 {
     scattered->origin = rec->p;
-    scattered->direction = reflect(ray_in->direction.unit_vector(), rec->normal) + random_unit_in_sphere(state) * fuzziness;
+    scattered->direction = reflect(ray_in->direction.unit_vector(), rec->normal) + random_in_unit_sphere(state) * fuzziness;
     *attenuation = albedo;
     return dot(scattered->direction, rec->normal) > 0.0f;
 }
@@ -44,7 +58,7 @@ __device__ float schlick(float cosine, float ref_idx)
     return r0 + (1.0f - r0) * (1.0f - cosine) * (1.0f - cosine) * (1.0f - cosine) * (1.0f - cosine) * (1.0f - cosine);
 }
 
-__device__ bool Dielectric::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, curandState_t* state) const
+__device__ bool Dielectric::scatter(Ray* ray_in, HitRecord* rec, vec3* attenuation, Ray* scattered, float& pdf, curandState_t* state) const
 {
     vec3 outward_normal;
     float ni_over_nt;
